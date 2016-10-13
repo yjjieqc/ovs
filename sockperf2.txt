@@ -6,20 +6,20 @@ sockperf: Warmup stage (sending a few dummy messages)...
 sockperf: Starting test...
 sockperf: Test end (interrupted by timer)
 sockperf: Test ended
-sockperf: [Total Run] RunTime=30.100 sec; SentMessages=5868; ReceivedMessages=5867
+sockperf: [Total Run] RunTime=30.100 sec; SentMessages=5916; ReceivedMessages=5915
 sockperf: ========= Printing statistics for Server No: 0
-sockperf: [Valid Duration] RunTime=30.096 sec; SentMessages=5867; ReceivedMessages=5867
-sockperf: [2;35m====> avg-lat=2564.572 (std-dev=102.840)[0m
+sockperf: [Valid Duration] RunTime=30.098 sec; SentMessages=5915; ReceivedMessages=5915
+sockperf: [2;35m====> avg-lat=2543.738 (std-dev=73.258)[0m
 sockperf: # dropped messages = 0; # duplicated messages = 0; # out-of-order messages = 0
-sockperf: Summary: Latency is 2564.572 usec
-sockperf: [2;35mTotal 5867 observations[0m; each percentile contains 58.67 observations
-sockperf: ---> <MAX> observation = 2964.269
-sockperf: ---> percentile 99.999 = 2964.269
-sockperf: ---> percentile 99.990 = 2951.770
-sockperf: ---> percentile 99.900 = 2901.800
-sockperf: ---> percentile 99.000 = 2808.010
-sockperf: ---> percentile 90.000 = 2685.069
-sockperf: ---> percentile 75.000 = 2633.430
-sockperf: ---> percentile 50.000 = 2571.409
-sockperf: ---> percentile 25.000 = 2499.850
-sockperf: ---> <MIN> observation = 2014.430
+sockperf: Summary: Latency is 2543.738 usec
+sockperf: [2;35mTotal 5915 observations[0m; each percentile contains 59.15 observations
+sockperf: ---> <MAX> observation = 2863.970
+sockperf: ---> percentile 99.999 = 2863.970
+sockperf: ---> percentile 99.990 = 2848.850
+sockperf: ---> percentile 99.900 = 2784.290
+sockperf: ---> percentile 99.000 = 2686.490
+sockperf: ---> percentile 90.000 = 2630.970
+sockperf: ---> percentile 75.000 = 2594.670
+sockperf: ---> percentile 50.000 = 2551.840
+sockperf: ---> percentile 25.000 = 2497.430
+sockperf: ---> <MIN> observation = 2159.260
