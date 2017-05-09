@@ -1,6 +1,6 @@
 #!/bin/sh
 
-ovs-vsctl set port eth2 qos=@newqos -- \
+ovs-vsctl set port eth1 qos=@newqos -- \
        --id=@newqos create qos type=linux-htb \
            other-config:max-rate=10000000000 \
            queues:111=@q0 \
