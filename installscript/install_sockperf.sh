@@ -4,7 +4,7 @@ echo "installing iperf and sockperf"
 sudo apt-get update
 sudo apt-get install iperf
 
-git clone http://git.killua.wang/yjjieqc/sockperf.git 
+git clone https://github.com/Mellanox/sockperf.git
 cd sockperf
 ./autogen.sh 
 ./configure 
