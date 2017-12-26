@@ -1,0 +1,85 @@
+--- datapath.c	2017-03-09 01:14:46.413852249 -0600
++++ datapath_tcpece_gradient.c	2017-03-09 01:15:39.978859382 -0600
+@@ -61,6 +61,28 @@
+ #include "vport-internal_dev.h"
+ #include "vport-netdev.h"
+ 
++/*************************qiwei's logic************************/
++extern unsigned int queuelength;
++unsigned int threshold1=10000;
++module_param(threshold1, uint, 0640);
++MODULE_PARM_DESC(threshold1, "the mark_threshold1 for htb_queue by bytes");
++EXPORT_SYMBOL(threshold1);
++
++unsigned int threshold2=20000;
++module_param(threshold2, uint, 0640);
++MODULE_PARM_DESC(threshold2, "the mark_threshold2 for htb_queue by bytes");
++EXPORT_SYMBOL(threshold2);
++
++static unsigned int ALPHA = 4096;// ALPHA / 2^13 is float alpha
++module_param(ALPHA, uint, 0644);
++MODULE_PARM_DESC(ALPHA, "An unsigned int to initlize EWMA's alpha");
++
++/*************************************keqiang's logic**************************/
++//keqiang's logic
++#include <linux/hashtable.h>
++#include <net/tcp.h>
++#define BRIDGE_NAME "br0" //help determine the direction of a packet, when we move to container, we only compare first 2 char
++
+ int ovs_net_id __read_mostly;
+ EXPORT_SYMBOL_GPL(ovs_net_id);
+ 
+@@ -257,6 +279,14 @@
+ 	ovs_vport_del(p);
+ }
+ 
++/*helper function, determine the direction of the traffic (packet), i.e., go to the net or come to the host?*/
++static bool ovs_packet_to_net(struct sk_buff *skb) {
++    if (strncmp(skb->dev->name, BRIDGE_NAME, 2) == 0)
++        return 1;
++    else
++        return 0;
++}
++
+ /* Must be called with rcu_read_lock. */
+ void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key)
+ {
+@@ -267,9 +297,38 @@
+ 	struct dp_stats_percpu *stats;
+ 	u64 *stats_counter;
+ 	u32 n_mask_hit;
++	struct iphdr *nh = NULL;
++	struct tcphdr * tcp = NULL;
++	
++	//consider gradient
++	static unsigned long long prev_qlen = 0;
++    	long long new_qlen_diff;
++    	static long long qlen_diff = 0;
++    	long long normalized_gradient;
++    	unsigned long long new_qlen;
+ 
+ 	stats = this_cpu_ptr(dp->stats_percpu);
+ 
++	new_qlen = (unsigned long long)queuelength;
++     	new_qlen_diff = new_qlen - prev_qlen;
++     	qlen_diff = ((8192-ALPHA)*qlen_diff + ALPHA*new_qlen_diff) / 8192;
++     	normalized_gradient = qlen_diff*8192 / threshold1;//scaled by 2^13
++
++     	printk(KERN_INFO "new_qlen:%llu, prev_qlen:%llu, qlen_diff:%lld, gradient:%lld \n", new_qlen, prev_qlen, qlen_diff, normalized_gradient);
++     	prev_qlen = new_qlen;
++	// implement the tcp ece idea to reduce control loop latency
++        if(ntohs(skb->protocol) == ETH_P_IP) {
++        	nh = ip_hdr(skb);
++                //printk(KERN_INFO "nh = ip_hdr(skb)");
++                if(nh->protocol == IPPROTO_TCP) {
++		    tcp= tcp_hdr(skb);
++                    if (!ovs_packet_to_net(skb) && tcp->ack) { //for incoming acks
++			if ((new_qlen > threshold2) || (new_qlen > threshold1 && normalized_gradient > 0)) {
++				tcp->ece = 1;
++			}
++                    }
++                }//it was an TCP packet
++        }//it was an IP packet
+ 	/* Look up flow. */
+ 	flow = ovs_flow_tbl_lookup_stats(&dp->table, key, skb_get_hash(skb),
+ 					 &n_mask_hit);

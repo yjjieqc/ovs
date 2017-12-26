@@ -1,0 +1,123 @@
+--- sch_htb.c	2017-03-08 11:29:18.353459000 +0800
++++ tsinghua.c	2017-03-08 14:37:06.531902000 +0800
+@@ -40,6 +40,13 @@
+ #include <net/netlink.h>
+ #include <net/sch_generic.h>
+ #include <net/pkt_sched.h>
++#include <linux/inet.h>
++#include <linux/byteorder/generic.h> 
++#include <uapi/linux/ip.h>
++#include <linux/ip.h>
++#include <uapi/linux/if_ether.h>
++#include <uapi/linux/in.h>
++#include <net/dsfield.h>
+ 
+ /* HTB algorithm.
+     Author: devik@cdi.cz
+@@ -54,6 +61,18 @@
+     one less than their parent.
+ */
+ 
++long		qavg;
++long		prevqlen;
++ktime_t		prev_pkt_time;
++
++static int k1 = 30;
++module_param(k1, int, 0640);
++MODULE_PARM_DESC(k1, "the threshold for K1 by bytes");
++
++static int k2 = 36;
++module_param(k2, int, 0640);
++MODULE_PARM_DESC(k2, "the threshold for K2 by bytes");
++
+ static int htb_hysteresis __read_mostly = 0; /* whether to use mode hysteresis for speedup */
+ #define HTB_VER 0x30011		/* major must be matched with number suplied by TC as version */
+ 
+@@ -576,6 +595,7 @@
+ 	int uninitialized_var(ret);
+ 	struct htb_sched *q = qdisc_priv(sch);
+ 	struct htb_class *cl = htb_classify(skb, sch, &ret);
++	struct iphdr *nh;
+ 
+ 	if (cl == HTB_DIRECT) {
+ 		/* enqueue to helper queue */
+@@ -605,6 +625,27 @@
+ 
+ 	qdisc_qstats_backlog_inc(sch, skb);
+ 	sch->q.qlen++;
++	//ecn marking code
++	if (sch->q.qlen > k2) {
++		if (ntohs(skb->protocol) == ETH_P_IP) {
++			nh = ip_hdr(skb);
++			//printk(KERN_INFO "nh = ip_hdr(skb)");
++			if (nh->protocol == IPPROTO_TCP) {
++				ipv4_change_dsfield(nh, 0, 3);
++				printk(KERN_INFO "qlen>k2,tos value=%u\n", ipv4_get_dsfield(nh));
++			}//it was an TCP packet
++		}//it was an IP packet
++	}
++	else if (qavg < 0 && sch->q.qlen >= k1) {
++		if (ntohs(skb->protocol) == ETH_P_IP) {
++			nh = ip_hdr(skb);
++			//printk(KERN_INFO "nh = ip_hdr(skb)");
++			if (nh->protocol == IPPROTO_TCP) {
++				ipv4_change_dsfield(nh, 0, 3);
++				printk(KERN_INFO "pkt>k1 && qavg<0,tos value=%u\n", ipv4_get_dsfield(nh));
++			}//it was an TCP packet
++		}//it was an IP packet
++	}
+ 	return NET_XMIT_SUCCESS;
+ }
+ 
+@@ -886,6 +927,9 @@
+ 	int level;
+ 	s64 next_event;
+ 	unsigned long start_at;
++	struct iphdr *nh;
++	s64 delta;
++	long s;
+ 
+ 	/* try to dequeue direct packets as high prio (!) to minimize cpu work */
+ 	skb = __skb_dequeue(&q->direct_queue);
+@@ -893,6 +937,31 @@
+ ok:
+ 		qdisc_bstats_update(sch, skb);
+ 		qdisc_qstats_backlog_dec(sch, skb);
++		//check queue length to delete ecn mark;
++		if (unlikely(prev_pkt_time.tv64 == 0)) {
++			delta = 0;
++			s = 0;
++		}
++		else {
++			delta = ktime_us_delta(ktime_get(), prev_pkt_time);
++			printk(KERN_INFO "delta t is %lld\n", delta);
++			//		delta = ktime_us_delta(ktime_get(), prev_pkt_time);
++			if (unlikely(delta < 1))
++				printk(KERN_ERR "delta is zero, illegial divisor!");
++			else
++				s = (sch->q.qlen - prevqlen) / delta;
++		}
++		qavg = qavg + ((s - qavg) >> 3);
++		if ((sch->q.qlen < k2) && ((sch->q.qlen > k1) || (qavg < 0)))
++			if (ntohs(skb->protocol) == ETH_P_IP) {
++				nh = ip_hdr(skb);
++				if ((ipv4_get_dsfield(nh) == 3) && nh->protocol == IPPROTO_TCP) {
++					ipv4_change_dsfield(nh, 0, 2);
++					printk(KERN_INFO "change ecn form 3 to 2\n");
++				}//it was an TCP packet
++			}//it was an IP packet
++		prevqlen = sch->q.qlen;
++		prev_pkt_time = ktime_get();
+ 		sch->q.qlen--;
+ 		return skb;
+ 	}
+@@ -963,6 +1032,9 @@
+ 	__qdisc_reset_queue(&q->direct_queue);
+ 	sch->q.qlen = 0;
+ 	sch->qstats.backlog = 0;
++	qavg = 0;
++	prevqlen = 0;
++	prev_pkt_time = ktime_get();
+ 	memset(q->hlevel, 0, sizeof(q->hlevel));
+ 	memset(q->row_mask, 0, sizeof(q->row_mask));
+ 	for (i = 0; i < TC_HTB_NUMPRIO; i++)
